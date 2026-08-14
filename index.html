@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Dashboard Financeiro</title>
+<meta name="theme-color" content="#0b0d16" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Financeiro" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="dark">
+
+<!-- Tela de login -->
+<div id="gate" class="gate">
+  <div class="wallet-3d">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="34" height="34">
+      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+    </svg>
+  </div>
+  <h1>Dashboard Financeiro</h1>
+  <p>Conecte sua conta Google para sincronizar seus lançamentos direto da sua planilha.</p>
+  <button id="signInBtn" class="btn-primary">Conectar com Google</button>
+  <p id="gateStatus" style="font-size:0.75rem; min-height: 16px;"></p>
+</div>
+
+<!-- App principal -->
+<div id="app" class="app hidden">
+
+  <header class="header">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+      </svg>
+    </div>
+    <div class="header-titles">
+      <h1>Dashboard Financeiro <span class="badge" id="monthBadge">—</span></h1>
+      <p>Visão detalhada de entradas, despesas por categoria e contas fixas</p>
+    </div>
+    <div class="header-actions">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="searchInput" type="text" placeholder="Buscar lançamento..." />
+      </div>
+      <button id="themeToggle" class="icon-btn" title="Alternar tema">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button id="refreshBtn" class="icon-btn" title="Atualizar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <button id="newEntryBtn" class="btn-primary new-entry-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Novo Lançamento
+      </button>
+    </div>
+  </header>
+
+  <section class="summary-grid" id="summaryGrid">
+    <div class="tilt-card" data-tilt>
+      <div class="stat-top">
+        <span class="stat-label">Total Entradas</span>
+        <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg></div>
+      </div>
+      <div class="stat-value" id="statEntradas">R$ 0,00</div>
+      <div class="stat-sub green" id="statEntradasSub">— fontes de receita</div>
+      <div class="stat-bar"><div id="barEntradas" style="width:0%; background: var(--green);"></div></div>
+    </div>
+    <div class="tilt-card" data-tilt>
+      <div class="stat-top">
+        <span class="stat-label">Total Saídas</span>
+        <div class="stat-icon red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M23 18l-9.5-9.5-5 5L1 6"/><path d="M17 18h6v-6"/></svg></div>
+      </div>
+      <div class="stat-value" id="statSaidas">R$ 0,00</div>
+      <div class="stat-sub red" id="statSaidasSub">—% das receitas</div>
+      <div class="stat-bar"><div id="barSaidas" style="width:0%; background: var(--red);"></div></div>
+    </div>
+    <div class="tilt-card" data-tilt>
+      <div class="stat-top">
+        <span class="stat-label">Saldo Atual</span>
+        <div class="stat-icon accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      </div>
+      <div class="stat-value" id="statSaldo">R$ 0,00</div>
+      <div class="stat-sub" id="statSaldoSub">Balanço</div>
+      <div class="stat-bar"><div id="barSaldo" style="width:0%; background: var(--accent);"></div></div>
+    </div>
+    <div class="tilt-card" data-tilt>
+      <div class="stat-top">
+        <span class="stat-label">Contas Pendentes</span>
+        <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+      </div>
+      <div class="stat-value" id="statPendentes">R$ 0,00</div>
+      <div class="stat-sub amber" id="statPendentesSub">— contas a pagar</div>
+      <div class="stat-bar"><div id="barPendentes" style="width:0%; background: var(--amber);"></div></div>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="geral">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Visão Geral
+    </button>
+    <button class="tab-btn" data-tab="entradas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 6l-9.5 9.5-5-5L1 18"/></svg>
+      Entradas <span id="countEntradas"></span>
+    </button>
+    <button class="tab-btn" data-tab="despesas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      Despesas <span id="countDespesas"></span>
+    </button>
+    <button class="tab-btn" data-tab="contas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Contas Fixas <span id="countContas"></span>
+    </button>
+  </nav>
+
+  <!-- Visão geral -->
+  <div class="panel active" id="panel-geral">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Distribuição de Gastos</h2>
+            <p>Proporção por categoria de despesa</p>
+          </div>
+        </div>
+        <div class="donut-row">
+          <div class="donut" id="donut">
+            <div class="donut-center">
+              <span>TOTAL GASTOS</span>
+              <strong id="donutTotal">R$ 0,00</strong>
+            </div>
+          </div>
+          <div class="legend" id="legend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Origens de Receita</h2>
+            <p>Por descrição do lançamento</p>
+          </div>
+        </div>
+        <div class="list" id="origensList"></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Status das Contas Fixas</h2>
+            <p id="billsSummaryText">0 de 0 pagas neste mês</p>
+          </div>
+        </div>
+        <div class="status-summary">
+          <span class="paid" id="paidLabel">Pago: R$ 0,00</span>
+          <span class="pending" id="pendingLabel">Pendente: R$ 0,00</span>
+        </div>
+        <div class="status-bar"><div id="statusBarFill" style="width:0%"></div></div>
+        <div class="bills-grid" id="billsGridPreview"></div>
+      </div>
+
+      <div class="cash-summary">
+        <span class="eyebrow">Resumo do Caixa</span>
+        <h3 id="cashHeadline">—</h3>
+        <p id="cashText">Calculando...</p>
+        <div class="cash-split">
+          <div><span>Saldo Líquido</span><strong class="green" id="cashSaldo">R$ 0,00</strong></div>
+          <div><span>Pendente Fixo</span><strong class="amber" id="cashPendente">R$ 0,00</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Entradas -->
+  <div class="panel" id="panel-entradas">
+    <div class="card"><div class="list" id="entradasList"></div></div>
+  </div>
+
+  <!-- Despesas -->
+  <div class="panel" id="panel-despesas">
+    <div class="card"><div class="list" id="despesasList"></div></div>
+  </div>
+
+  <!-- Contas fixas -->
+  <div class="panel" id="panel-contas">
+    <div class="card">
+      <div class="bills-grid" id="billsGridFull"></div>
+    </div>
+  </div>
+
+  <p class="sync-note" id="syncNote">
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+    Sincronizado com Google Sheets
+  </p>
+</div>
+
+<!-- Modal Novo Lançamento -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Novo Lançamento</h3>
+      <button class="icon-btn" id="closeModal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="type-toggle">
+      <button type="button" class="active entrada" data-type="Entradas">Entrada</button>
+      <button type="button" class="saida" data-type="Saídas">Saída</button>
+      <button type="button" data-type="Gasto Cartão">Cartão</button>
+    </div>
+    <form id="entryForm">
+      <div class="field-row">
+        <div class="field">
+          <label>Data</label>
+          <input type="date" id="fData" required />
+        </div>
+        <div class="field">
+          <label>Valor (R$)</label>
+          <input type="number" id="fValor" step="0.01" min="0" placeholder="0,00" required />
+        </div>
+      </div>
+      <div class="field">
+        <label>Categoria</label>
+        <input type="text" id="fCategoria" placeholder="Ex: Moradia, Transporte..." required />
+      </div>
+      <div class="field">
+        <label>Descrição</label>
+        <input type="text" id="fDescricao" placeholder="Ex: Energia, Hinova Conecta..." required />
+      </div>
+      <div class="field">
+        <label>Data de vencimento (opcional — marca como conta fixa)</label>
+        <input type="date" id="fVencimento" />
+        <small class="hint">Preencha só se este lançamento for uma conta a pagar/controlar.</small>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelBtn">Cancelar</button>
+        <button type="submit" class="btn-primary" id="submitBtn">Salvar lançamento</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="app.js"></script>
+</body>
+</html>
