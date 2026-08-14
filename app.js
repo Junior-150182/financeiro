@@ -29,30 +29,37 @@ window.addEventListener("load", () => {
       scope: CONFIG.SCOPE,
       callback: (resp) => {
         if (resp.error) {
-          setGateStatus("Não foi possível conectar: " + resp.error, true);
+          setGateStatus("Toque em conectar para continuar.", false);
           return;
         }
         accessToken = resp.access_token;
-        sessionStorage.setItem("gt_token", accessToken);
-        sessionStorage.setItem("gt_token_exp", String(Date.now() + resp.expires_in * 1000));
+        localStorage.setItem("gt_token", accessToken);
+        localStorage.setItem("gt_token_exp", String(Date.now() + resp.expires_in * 1000));
+        localStorage.setItem("gt_connected", "1");
         onSignedIn();
         if (pendingAfterAuth) { const fn = pendingAfterAuth; pendingAfterAuth = null; fn(); }
       },
     });
     document.getElementById("signInBtn").disabled = false;
+
+    // Se já conectou antes neste dispositivo, tenta reconectar sozinho, sem pedir clique
+    if (localStorage.getItem("gt_connected") === "1") {
+      setGateStatus("Reconectando...");
+      tokenClient.requestAccessToken({ prompt: "" });
+    }
   });
 
   document.getElementById("signInBtn").addEventListener("click", () => {
     setGateStatus("Abrindo login do Google...");
-    tokenClient.requestAccessToken({ prompt: "consent" });
+    tokenClient.requestAccessToken({ prompt: "" });
   });
 
   initTheme();
   bindUI();
 
   // tenta retomar sessão sem pedir login de novo
-  const saved = sessionStorage.getItem("gt_token");
-  const exp = Number(sessionStorage.getItem("gt_token_exp") || 0);
+  const saved = localStorage.getItem("gt_token");
+  const exp = Number(localStorage.getItem("gt_token_exp") || 0);
   if (saved && Date.now() < exp - 60000) {
     accessToken = saved;
     onSignedIn();
@@ -71,7 +78,7 @@ function setGateStatus(msg, isError) {
 }
 
 function ensureFreshToken(cb) {
-  const exp = Number(sessionStorage.getItem("gt_token_exp") || 0);
+  const exp = Number(localStorage.getItem("gt_token_exp") || 0);
   if (accessToken && Date.now() < exp - 60000) return cb();
   pendingAfterAuth = cb;
   tokenClient.requestAccessToken({ prompt: "" });
