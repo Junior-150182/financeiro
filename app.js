@@ -13,63 +13,65 @@ const CONFIG = {
    (a coluna H "Status" é criada/usada por este app para marcar Pago/Pendente) */
 
 const CATEGORY_COLORS = ["#8b7cf6", "#f59e0b", "#3b82f6", "#14b8a6", "#f43f5e", "#22c55e", "#ec4899", "#06b6d4"];
+const REDIRECT_URI = window.location.origin + window.location.pathname;
 
 let accessToken = null;
-let tokenClient = null;
-let pendingAfterAuth = null;
 let rows = []; // { rowNumber, data, tipo, categoria, descricao, vencimento, valor, id, status }
 
 /* ============================================================
-   AUTENTICAÇÃO GOOGLE
+   AUTENTICAÇÃO GOOGLE (fluxo por redirecionamento de página —
+   funciona de forma confiável em navegadores mobile, ao
+   contrário do fluxo de pop-up, que costuma ser bloqueado)
    ============================================================ */
+function startGoogleAuth() {
+  setGateStatus("Abrindo login do Google...");
+  const params = new URLSearchParams({
+    client_id: CONFIG.CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: "token",
+    scope: CONFIG.SCOPE,
+    include_granted_scopes: "true",
+  });
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+function tryConsumeHashToken() {
+  if (!window.location.hash) return false;
+  const params = new URLSearchParams(window.location.hash.substring(1));
+  const token = params.get("access_token");
+  const expiresIn = params.get("expires_in");
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (token) {
+    accessToken = token;
+    localStorage.setItem("gt_token", token);
+    localStorage.setItem("gt_token_exp", String(Date.now() + Number(expiresIn) * 1000));
+    localStorage.setItem("gt_connected", "1");
+    return true;
+  }
+  if (params.get("error")) {
+    setGateStatus("Não foi possível conectar. Toque para tentar de novo.", true);
+  }
+  return false;
+}
+
 window.addEventListener("load", () => {
-  waitForGSI(() => {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.CLIENT_ID,
-      scope: CONFIG.SCOPE,
-      callback: (resp) => {
-        if (resp.error) {
-          setGateStatus("Toque em conectar para continuar.", false);
-          return;
-        }
-        accessToken = resp.access_token;
-        localStorage.setItem("gt_token", accessToken);
-        localStorage.setItem("gt_token_exp", String(Date.now() + resp.expires_in * 1000));
-        localStorage.setItem("gt_connected", "1");
-        onSignedIn();
-        if (pendingAfterAuth) { const fn = pendingAfterAuth; pendingAfterAuth = null; fn(); }
-      },
-    });
-    document.getElementById("signInBtn").disabled = false;
-
-    // Se já conectou antes neste dispositivo, tenta reconectar sozinho, sem pedir clique
-    if (localStorage.getItem("gt_connected") === "1") {
-      setGateStatus("Reconectando...");
-      tokenClient.requestAccessToken({ prompt: "" });
-    }
-  });
-
-  document.getElementById("signInBtn").addEventListener("click", () => {
-    setGateStatus("Abrindo login do Google...");
-    tokenClient.requestAccessToken({ prompt: "" });
-  });
-
   initTheme();
   bindUI();
 
-  // tenta retomar sessão sem pedir login de novo
+  document.getElementById("signInBtn").addEventListener("click", startGoogleAuth);
+
+  if (tryConsumeHashToken()) { onSignedIn(); return; }
+
   const saved = localStorage.getItem("gt_token");
   const exp = Number(localStorage.getItem("gt_token_exp") || 0);
   if (saved && Date.now() < exp - 60000) {
     accessToken = saved;
     onSignedIn();
+    return;
   }
-});
 
-function waitForGSI(cb) {
-  if (window.google && google.accounts && google.accounts.oauth2) return cb();
-  setTimeout(() => waitForGSI(cb), 150);
-}
+  document.getElementById("signInBtn").disabled = false;
+});
 
 function setGateStatus(msg, isError) {
   const el = document.getElementById("gateStatus");
@@ -80,8 +82,8 @@ function setGateStatus(msg, isError) {
 function ensureFreshToken(cb) {
   const exp = Number(localStorage.getItem("gt_token_exp") || 0);
   if (accessToken && Date.now() < exp - 60000) return cb();
-  pendingAfterAuth = cb;
-  tokenClient.requestAccessToken({ prompt: "" });
+  showToast("Sessão expirada, reconectando...", true);
+  setTimeout(startGoogleAuth, 900);
 }
 
 function onSignedIn() {
