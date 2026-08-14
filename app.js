@@ -122,7 +122,7 @@ async function loadData() {
     showToast("Dados atualizados", false);
   } catch (e) {
     console.error(e);
-    showToast("Erro ao ler a planilha. Verifique o nome da aba em CONFIG.SHEET_NAME.", true);
+    showToast("Erro: " + e.message.slice(0, 140), true);
   }
 }
 
@@ -498,7 +498,7 @@ function showToast(msg, isError, isLoading) {
   el.textContent = msg;
   el.className = "toast show" + (isError ? " error" : isLoading ? "" : " success");
   clearTimeout(toastTimer);
-  if (!isLoading) toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  if (!isLoading) toastTimer = setTimeout(() => el.classList.remove("show"), isError ? 8000 : 2600);
 }
 
 /* Registra o service worker (funciona offline após o primeiro carregamento) */
