@@ -134,7 +134,9 @@ button, input, select { font-family: inherit; }
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   transition: transform 0.15s ease;
 }
+.icon-btn.listening { background: var(--red-soft); color: var(--red); animation: pulse 1s ease-in-out infinite; }
 .icon-btn:active { transform: scale(0.92); }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,0.4); } 50% { box-shadow: 0 0 0 8px rgba(244,63,94,0); } }
 .icon-btn svg { width: 18px; height: 18px; }
 
 .new-entry-btn {
