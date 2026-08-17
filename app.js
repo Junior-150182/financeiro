@@ -15,10 +15,11 @@ const CONFIG = {
    (a coluna H "Status" é criada/usada por este app para marcar Pago/Pendente) */
 
 const CATEGORY_COLORS = ["#8b7cf6", "#f59e0b", "#3b82f6", "#14b8a6", "#f43f5e", "#22c55e", "#ec4899", "#06b6d4"];
-const REDIRECT_URI = window.location.origin + window.location.pathname;
+const REDIRECT_URI = (window.location.origin + window.location.pathname).replace(/index\.html$/, "");
 
 let accessToken = null;
 let rows = []; // { rowNumber, data, tipo, categoria, descricao, vencimento, valor, id, status }
+let valuesHidden = localStorage.getItem("valuesHidden") === "1";
 
 /* ============================================================
    AUTENTICAÇÃO GOOGLE (fluxo por redirecionamento de página —
@@ -164,10 +165,23 @@ async function updateStatus(rowNumber, newStatus) {
   });
 }
 
+async function updateStatusMultiple(rowNumbers, newStatus) {
+  await sheetsFetch(`/values:batchUpdate`, {
+    method: "POST",
+    body: JSON.stringify({
+      valueInputOption: "USER_ENTERED",
+      data: rowNumbers.map((rn) => ({
+        range: `${CONFIG.SHEET_NAME}!H${rn}`,
+        values: [[newStatus]],
+      })),
+    }),
+  });
+}
+
 /* ============================================================
    FORMATAÇÃO E DATAS
    ============================================================ */
-const fmtBRL = (n) => (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtBRL = (n) => (valuesHidden ? "R$ ••••••" : (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 
 function parseDateBR(str) {
   if (!str) return null;
@@ -211,19 +225,19 @@ function renderAll() {
   const totalPendente = pendentes.reduce((s, r) => s + r.valor, 0);
 
   document.getElementById("statEntradas").textContent = fmtBRL(totalEntradas);
-  document.getElementById("statEntradasSub").textContent = `${entradas.length} fonte${entradas.length === 1 ? "" : "s"} de receita`;
+  document.getElementById("statEntradasSub").textContent = valuesHidden ? "••••••" : `${entradas.length} fonte${entradas.length === 1 ? "" : "s"} de receita`;
   document.getElementById("barEntradas").style.width = "100%";
 
   document.getElementById("statSaidas").textContent = fmtBRL(totalSaidas);
-  document.getElementById("statSaidasSub").textContent = `${totalEntradas ? ((totalSaidas / totalEntradas) * 100).toFixed(1) : "0.0"}% das receitas`;
+  document.getElementById("statSaidasSub").textContent = valuesHidden ? "••••••" : `${totalEntradas ? ((totalSaidas / totalEntradas) * 100).toFixed(1) : "0.0"}% das receitas`;
   document.getElementById("barSaidas").style.width = `${Math.min(100, totalEntradas ? (totalSaidas / totalEntradas) * 100 : 0)}%`;
 
   document.getElementById("statSaldo").textContent = fmtBRL(saldo);
-  document.getElementById("statSaldoSub").textContent = saldo >= 0 ? "Balanço Positivo" : "Balanço Negativo";
+  document.getElementById("statSaldoSub").textContent = valuesHidden ? "••••••" : (saldo >= 0 ? "Balanço Positivo" : "Balanço Negativo");
   document.getElementById("barSaldo").style.width = `${saldo >= 0 ? 100 : 15}%`;
 
   document.getElementById("statPendentes").textContent = fmtBRL(totalPendente);
-  document.getElementById("statPendentesSub").textContent = `${pendentes.length} conta${pendentes.length === 1 ? "" : "s"} a pagar`;
+  document.getElementById("statPendentesSub").textContent = valuesHidden ? "••••••" : `${pendentes.length} conta${pendentes.length === 1 ? "" : "s"} a pagar`;
   document.getElementById("barPendentes").style.width = `${bills.length ? (pendentes.length / bills.length) * 100 : 0}%`;
 
   document.getElementById("countEntradas").textContent = `(${entradas.length})`;
@@ -235,7 +249,7 @@ function renderAll() {
   renderBills(bills);
   renderCashSummary(totalEntradas, totalSaidas, saldo, totalPendente);
   renderList("entradasList", entradas, "green");
-  renderList("despesasList", despesasAll, "red");
+  renderList("despesasList", despesasAll, "red", true);
 }
 
 function renderDonut(saidas, total) {
@@ -300,9 +314,38 @@ function renderOrigens(entradas, total) {
   }).join("");
 }
 
-function renderList(elId, list, tone) {
+function renderList(elId, list, tone, group) {
   const el = document.getElementById(elId);
   if (!list.length) { el.innerHTML = `<div class="empty-state">Nada por aqui ainda</div>`; return; }
+
+  if (group) {
+    // Agrupa por descrição, somando os valores (só na tela — a planilha mantém cada linha separada)
+    const groups = {};
+    list.forEach((r) => {
+      const key = (r.descricao || r.categoria).trim().toLowerCase();
+      if (!groups[key]) groups[key] = { nome: r.descricao || r.categoria, categoria: r.categoria, valor: 0, count: 0, latestData: r.data, isCartao: false };
+      groups[key].valor += r.valor;
+      groups[key].count += 1;
+      if (r.tipo.toLowerCase().startsWith("gasto cart")) groups[key].isCartao = true;
+      if ((parseDateBR(r.data) || 0) > (parseDateBR(groups[key].latestData) || 0)) groups[key].latestData = r.data;
+    });
+    const sorted = Object.values(groups).sort((a, b) => (parseDateBR(b.latestData) || 0) - (parseDateBR(a.latestData) || 0));
+    el.innerHTML = sorted.map((g) => `
+      <div class="list-item">
+        <div class="list-icon" style="background:var(--${tone}-soft); color:var(--${tone});">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <div class="list-body">
+          <div class="list-title">${escapeHTML(g.nome)} ${g.count > 1 ? `<span class="badge" style="margin-left:4px;">${g.count}x</span>` : ""} ${g.isCartao ? '<span class="badge" style="margin-left:4px;">Cartão</span>' : ""}</div>
+          <div class="list-date">${escapeHTML(g.categoria)} • último em ${escapeHTML(g.latestData)}${g.isCartao ? " • não somado no total" : ""}</div>
+        </div>
+        <div class="list-right">
+          <div class="list-value">${fmtBRL(g.valor)}</div>
+        </div>
+      </div>`).join("");
+    return;
+  }
+
   const sorted = [...list].sort((a, b) => (parseDateBR(b.data) || 0) - (parseDateBR(a.data) || 0));
   el.innerHTML = sorted.map((r) => {
     const isCartao = r.tipo.toLowerCase().startsWith("gasto cart");
@@ -333,17 +376,28 @@ function renderBills(bills) {
   document.getElementById("pendingLabel").textContent = `Pendente: ${fmtBRL(totalPending)}`;
   document.getElementById("statusBarFill").style.width = `${bills.length ? (paid.length / bills.length) * 100 : 0}%`;
 
-  const cardHTML = (r) => `
+  // Agrupa por descrição (só na exibição — a planilha continua com cada lançamento separado)
+  const groups = {};
+  bills.forEach((r) => {
+    const key = (r.descricao || r.categoria).trim().toLowerCase();
+    if (!groups[key]) groups[key] = { nome: r.descricao || r.categoria, valor: 0, rowNumbers: [], allPaid: true };
+    groups[key].valor += r.valor;
+    groups[key].rowNumbers.push(r.rowNumber);
+    if (r.status.toLowerCase() !== "pago") groups[key].allPaid = false;
+  });
+  const groupList = Object.values(groups).sort((a, b) => b.valor - a.valor);
+
+  const cardHTML = (g) => `
     <div class="bill-item">
       <div class="bill-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </div>
       <div class="bill-body">
-        <div class="bill-name">${escapeHTML(r.descricao || r.categoria)}</div>
-        <div class="bill-value">${fmtBRL(r.valor)}</div>
+        <div class="bill-name">${escapeHTML(g.nome)}${g.rowNumbers.length > 1 ? ` <span class="badge" style="margin-left:4px;">${g.rowNumbers.length}x</span>` : ""}</div>
+        <div class="bill-value">${fmtBRL(g.valor)}</div>
       </div>
-      <button class="status-pill ${r.status.toLowerCase() === "pago" ? "paid" : "pending"}" data-row="${r.rowNumber}">
-        ${r.status.toLowerCase() === "pago" ? "Pago" : "Pendente"}
+      <button class="status-pill ${g.allPaid ? "paid" : "pending"}" data-rows="${g.rowNumbers.join(",")}">
+        ${g.allPaid ? "Pago" : "Pendente"}
       </button>
     </div>`;
 
@@ -353,18 +407,19 @@ function renderBills(bills) {
     return;
   }
 
-  document.getElementById("billsGridPreview").innerHTML = bills.slice(0, 4).map(cardHTML).join("");
-  document.getElementById("billsGridFull").innerHTML = bills.map(cardHTML).join("");
+  document.getElementById("billsGridPreview").innerHTML = groupList.slice(0, 4).map(cardHTML).join("");
+  document.getElementById("billsGridFull").innerHTML = groupList.map(cardHTML).join("");
 
   document.querySelectorAll(".status-pill").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const rowNumber = Number(btn.dataset.row);
-      const row = rows.find((r) => r.rowNumber === rowNumber);
-      const newStatus = row.status.toLowerCase() === "pago" ? "Pendente" : "Pago";
+      const rowNumbers = btn.dataset.rows.split(",").map(Number);
+      const isPaidNow = btn.classList.contains("paid");
+      const newStatus = isPaidNow ? "Pendente" : "Pago";
       btn.disabled = true;
       try {
-        await updateStatus(rowNumber, newStatus);
-        row.status = newStatus;
+        if (rowNumbers.length === 1) await updateStatus(rowNumbers[0], newStatus);
+        else await updateStatusMultiple(rowNumbers, newStatus);
+        rowNumbers.forEach((rn) => { const row = rows.find((r) => r.rowNumber === rn); if (row) row.status = newStatus; });
         renderAll();
         showToast(`Marcado como ${newStatus}`, false);
       } catch (e) {
@@ -380,7 +435,7 @@ function renderBills(bills) {
 function renderCashSummary(totalEntradas, totalSaidas, saldo, totalPendente) {
   const pct = totalEntradas ? (totalSaidas / totalEntradas) * 100 : 0;
   document.getElementById("cashHeadline").textContent = saldo >= 0 ? "Economia Positiva" : "Atenção ao Orçamento";
-  document.getElementById("cashText").innerHTML = `Você utilizou <b>${pct.toFixed(1)}%</b> da sua receita total neste mês.`;
+  document.getElementById("cashText").innerHTML = valuesHidden ? "••••••" : `Você utilizou <b>${pct.toFixed(1)}%</b> da sua receita total neste mês.`;
   document.getElementById("cashSaldo").textContent = fmtBRL(saldo);
   document.getElementById("cashSaldo").className = saldo >= 0 ? "green" : "red";
   document.getElementById("cashPendente").textContent = fmtBRL(totalPendente);
@@ -422,6 +477,23 @@ function bindUI() {
     const next = body.dataset.theme === "dark" ? "light" : "dark";
     body.dataset.theme = next;
     localStorage.setItem("theme", next);
+  });
+
+  // Ocultar/mostrar valores
+  const hideBtn = document.getElementById("hideValuesBtn");
+  const eyeOpen = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  const eyeClosed = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.6 20.6 0 0 1 5.06-6.06M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a20.6 20.6 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>`;
+  function updateHideValuesIcon() {
+    hideBtn.innerHTML = valuesHidden ? eyeClosed : eyeOpen;
+    hideBtn.title = valuesHidden ? "Mostrar valores" : "Ocultar valores";
+    hideBtn.classList.toggle("value-hidden-active", valuesHidden);
+  }
+  updateHideValuesIcon();
+  hideBtn.addEventListener("click", () => {
+    valuesHidden = !valuesHidden;
+    localStorage.setItem("valuesHidden", valuesHidden ? "1" : "0");
+    updateHideValuesIcon();
+    if (rows.length) renderAll();
   });
 
   // Tilt 3D nos cards de resumo

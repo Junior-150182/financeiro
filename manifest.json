@@ -2,7 +2,7 @@
   "name": "Dashboard Financeiro",
   "short_name": "Financeiro",
   "description": "Controle de entradas, saídas e contas fixas sincronizado com Google Sheets",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
