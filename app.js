@@ -6,6 +6,8 @@ const CONFIG = {
   SPREADSHEET_ID: "1X4cJ7dnQPVUtZI1enkbrKqm3_4M27ef5ZNSglQVIUyg",
   SHEET_NAME: "Lançamentos", // nome da aba onde estão os lançamentos (ajuste se o nome real for outro)
   SCOPE: "https://www.googleapis.com/auth/spreadsheets",
+  CARD_DUE_DAY: 12,     // dia fixo do vencimento da fatura do cartão
+  CARD_CUTOFF_DAYS: 7,  // se faltar <= a esses dias para o vencimento, cai para o mês seguinte
 };
 
 /* Colunas esperadas na aba, na ordem:
@@ -57,6 +59,7 @@ function tryConsumeHashToken() {
 window.addEventListener("load", () => {
   initTheme();
   bindUI();
+  bindVoice();
 
   document.getElementById("signInBtn").addEventListener("click", startGoogleAuth);
 
@@ -437,9 +440,10 @@ function bindUI() {
   const backdrop = document.getElementById("modalBackdrop");
   const openModal = () => {
     document.getElementById("fData").value = new Date().toISOString().slice(0, 10);
+    vencimentoTouched = false;
     backdrop.classList.add("open");
   };
-  const closeModal = () => { backdrop.classList.remove("open"); document.getElementById("entryForm").reset(); };
+  const closeModal = () => { backdrop.classList.remove("open"); document.getElementById("entryForm").reset(); vencimentoTouched = false; };
 
   document.getElementById("newEntryBtn").addEventListener("click", openModal);
   document.getElementById("closeModal").addEventListener("click", closeModal);
@@ -447,11 +451,56 @@ function bindUI() {
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
 
   let selectedType = "Entradas";
+  let vencimentoTouched = false;
+
+  document.getElementById("fVencimento").addEventListener("input", () => { vencimentoTouched = true; });
+
+  function toISO(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function suggestVencimento() {
+    if (vencimentoTouched) return; // não sobrescreve o que o usuário já digitou
+    const dataVal = document.getElementById("fData").value;
+    if (!dataVal) return;
+    const baseDate = new Date(dataVal + "T00:00:00");
+    const fVenc = document.getElementById("fVencimento");
+
+    if (selectedType.toLowerCase().startsWith("gasto cart")) {
+      // Cartão: vencimento fixo no dia CARD_DUE_DAY. Se faltar <= CARD_CUTOFF_DAYS
+      // dias (ou o dia já passou), cai pra fatura do mês seguinte.
+      let candidate = new Date(baseDate.getFullYear(), baseDate.getMonth(), CONFIG.CARD_DUE_DAY);
+      const diffDays = Math.round((candidate - baseDate) / 86400000);
+      if (diffDays < 0 || diffDays <= CONFIG.CARD_CUTOFF_DAYS) {
+        candidate = new Date(candidate.getFullYear(), candidate.getMonth() + 1, CONFIG.CARD_DUE_DAY);
+      }
+      fVenc.value = toISO(candidate);
+      fVenc.dispatchEvent(new Event("change"));
+      return;
+    }
+
+    const desc = document.getElementById("fDescricao").value.trim().toLowerCase();
+    if (!desc) { fVenc.value = ""; return; }
+    // Conta recorrente: acha o lançamento mais recente com a mesma descrição
+    // que já tem vencimento, e soma 1 mês (mantém o mesmo dia).
+    const matches = rows.filter((r) => r.descricao.trim().toLowerCase() === desc && r.vencimento);
+    if (!matches.length) return;
+    matches.sort((a, b) => (parseDateBR(b.vencimento) || 0) - (parseDateBR(a.vencimento) || 0));
+    const last = parseDateBR(matches[0].vencimento);
+    if (!last) return;
+    const next = new Date(last.getFullYear(), last.getMonth() + 1, last.getDate());
+    fVenc.value = toISO(next);
+  }
+
+  document.getElementById("fDescricao").addEventListener("input", suggestVencimento);
+  document.getElementById("fData").addEventListener("change", suggestVencimento);
+
   document.querySelectorAll(".type-toggle button").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".type-toggle button").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       selectedType = btn.dataset.type;
+      suggestVencimento();
     });
   });
 
@@ -499,6 +548,94 @@ function bindUI() {
 function initTheme() {
   const saved = localStorage.getItem("theme") || "dark";
   document.body.dataset.theme = saved;
+}
+
+/* ============================================================
+   LANÇAMENTO POR VOZ
+   ============================================================ */
+const VOICE_CATEGORY_HINTS = {
+  "Moradia": ["energia", "água", "agua", "aluguel", "internet", "condomínio", "condominio", "luz", "gás", "gas"],
+  "Transporte": ["uber", "gasolina", "combustível", "combustivel", "estacionamento", "ônibus", "onibus", "99", "táxi", "taxi"],
+  "Alimentação": ["mercado", "supermercado", "restaurante", "ifood", "lanche", "padaria", "feira"],
+  "Telefonia": ["celular", "claro", "vivo", "tim", "oi"],
+  "Lazer": ["cinema", "netflix", "spotify", "youtube", "show", "passeio"],
+  "Saúde": ["farmácia", "farmacia", "remédio", "remedio", "consulta", "médico", "medico"],
+};
+
+function bindVoice() {
+  const btn = document.getElementById("voiceBtn");
+  if (!btn) return;
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognitionAPI) {
+    btn.addEventListener("click", () =>
+      showToast("Reconhecimento de voz não é suportado aqui. Use o Chrome no Android.", true)
+    );
+    return;
+  }
+
+  const recognition = new SpeechRecognitionAPI();
+  recognition.lang = "pt-BR";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  let listening = false;
+
+  btn.addEventListener("click", () => {
+    if (listening) return;
+    try {
+      recognition.start();
+      listening = true;
+      btn.classList.add("listening");
+      showToast("Ouvindo... fale o lançamento", false, true);
+    } catch (e) { /* já estava rodando */ }
+  });
+
+  recognition.addEventListener("result", (e) => {
+    const text = e.results[0][0].transcript;
+    showToast(`Entendi: "${text}" — confira e salve`, false);
+    fillFormFromVoice(text);
+  });
+  recognition.addEventListener("end", () => { listening = false; btn.classList.remove("listening"); });
+  recognition.addEventListener("error", () => {
+    listening = false;
+    btn.classList.remove("listening");
+    showToast("Não entendi. Tente falar mais perto do microfone.", true);
+  });
+}
+
+function fillFormFromVoice(text) {
+  const lower = text.toLowerCase();
+
+  let valor = null;
+  const moneyMatch = lower.match(/(\d+(?:[.,]\d{1,2})?)/);
+  if (moneyMatch) valor = parseFloat(moneyMatch[1].replace(",", "."));
+
+  let tipo = "Saídas";
+  if (/\b(recebi|ganhei|entrada|caiu|pagamento recebido)\b/.test(lower)) tipo = "Entradas";
+  else if (/\bcart[ãa]o\b/.test(lower)) tipo = "Gasto Cartão";
+
+  let categoria = "Outros";
+  for (const [cat, words] of Object.entries(VOICE_CATEGORY_HINTS)) {
+    if (words.some((w) => lower.includes(w))) { categoria = cat; break; }
+  }
+
+  let desc = text
+    .replace(/\d+(?:[.,]\d{1,2})?/g, "")
+    .replace(/\b(recebi|ganhei|entrada|paguei|gastei|comprei|de|do|da|no|na|em|com|reais|real|r\$)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (desc) desc = desc.charAt(0).toUpperCase() + desc.slice(1);
+
+  document.getElementById("newEntryBtn").click(); // abre o modal (já seta a data de hoje)
+
+  const typeBtn = document.querySelector(`.type-toggle button[data-type="${tipo}"]`);
+  if (typeBtn) typeBtn.click(); // atualiza o tipo selecionado e recalcula vencimento se for cartão
+
+  document.getElementById("fCategoria").value = categoria;
+  document.getElementById("fDescricao").value = desc;
+  if (valor !== null) document.getElementById("fValor").value = valor;
+
+  document.getElementById("fDescricao").dispatchEvent(new Event("input")); // tenta sugerir vencimento de conta recorrente
 }
 
 let toastTimer = null;
