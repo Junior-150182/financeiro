@@ -4,28 +4,27 @@
 const CONFIG = {
   CLIENT_ID: "277005164447-fpqg2sof9r9q3k68u7vgjds9fbicqd9q.apps.googleusercontent.com",
   SPREADSHEET_ID: "1X4cJ7dnQPVUtZI1enkbrKqm3_4M27ef5ZNSglQVIUyg",
-  SHEET_NAME: "Lançamentos", // nome da aba onde estão os lançamentos (ajuste se o nome real for outro)
+  SHEET_NAME: "Lançamentos",
   SCOPE: "https://www.googleapis.com/auth/spreadsheets",
-  CARD_DUE_DAY: 12,     // dia fixo do vencimento da fatura do cartão
-  CARD_CUTOFF_DAYS: 7,  // se faltar <= a esses dias para o vencimento, cai para o mês seguinte
+  CARD_CUTOFF_DAYS: 7,
+  CARDS: {
+    "Carrefour": 12,
+    "MLivre Lud": 10,
+    "Amazon": 10,
+    "Inter Rafa": 12,
+    "Inter JR": 4,
+    "Inter Lud": 15,
+    "Nubank JR": 12,
+  },
 };
-
-/* Colunas esperadas na aba, na ordem:
-   A: Data | B: Tipo | C: Categoria | D: Descrição | E: Data de Vencimento | F: Valor | G: ID | H: Status
-   (a coluna H "Status" é criada/usada por este app para marcar Pago/Pendente) */
 
 const CATEGORY_COLORS = ["#8b7cf6", "#f59e0b", "#3b82f6", "#14b8a6", "#f43f5e", "#22c55e", "#ec4899", "#06b6d4"];
 const REDIRECT_URI = (window.location.origin + window.location.pathname).replace(/index\.html$/, "");
 
 let accessToken = null;
-let rows = []; // { rowNumber, data, tipo, categoria, descricao, vencimento, valor, id, status }
+let rows = [];
 let valuesHidden = localStorage.getItem("valuesHidden") === "1";
 
-/* ============================================================
-   AUTENTICAÇÃO GOOGLE (fluxo por redirecionamento de página —
-   funciona de forma confiável em navegadores mobile, ao
-   contrário do fluxo de pop-up, que costuma ser bloqueado)
-   ============================================================ */
 function startGoogleAuth() {
   setGateStatus("Abrindo login do Google...");
   const params = new URLSearchParams({
@@ -96,9 +95,6 @@ function onSignedIn() {
   loadData();
 }
 
-/* ============================================================
-   LEITURA / ESCRITA NO GOOGLE SHEETS
-   ============================================================ */
 async function sheetsFetch(path, options = {}) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}${path}`;
   const resp = await fetch(url, {
@@ -178,9 +174,6 @@ async function updateStatusMultiple(rowNumbers, newStatus) {
   });
 }
 
-/* ============================================================
-   FORMATAÇÃO E DATAS
-   ============================================================ */
 const fmtBRL = (n) => (valuesHidden ? "R$ ••••••" : (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 
 function parseDateBR(str) {
@@ -189,7 +182,7 @@ function parseDateBR(str) {
   if (parts.length !== 3) return null;
   let [d, m, y] = parts;
   if (y.length === 4) return new Date(Number(y), Number(m) - 1, Number(d));
-  return new Date(Number(d), Number(m) - 1, Number(y)); // ISO yyyy-mm-dd from <input type=date>
+  return new Date(Number(d), Number(m) - 1, Number(y));
 }
 
 function isSameMonth(dateStr, ref) {
@@ -200,9 +193,6 @@ function isSameMonth(dateStr, ref) {
 
 const MONTHS_PT = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
 
-/* ============================================================
-   RENDERIZAÇÃO
-   ============================================================ */
 function renderAll() {
   const now = new Date();
   document.getElementById("monthBadge").textContent = MONTHS_PT[now.getMonth()];
@@ -210,9 +200,6 @@ function renderAll() {
   const monthRows = rows.filter((r) => isSameMonth(r.data, now) || (r.vencimento && isSameMonth(r.vencimento, now)));
 
   const entradas = monthRows.filter((r) => r.tipo.toLowerCase() === "entradas");
-  // "Saídas" = despesas que contam no total. "Gasto Cartão" é só para conferência com a fatura
-  // e NÃO entra na soma (o valor da fatura do cartão já vem como "Saídas" categoria "Cartão Crédito"),
-  // senão o valor seria contado duas vezes.
   const saidas = monthRows.filter((r) => r.tipo.toLowerCase() === "saídas" || r.tipo.toLowerCase() === "saidas");
   const gastoCartao = monthRows.filter((r) => r.tipo.toLowerCase() === "gasto cartão" || r.tipo.toLowerCase() === "gasto cartao");
   const despesasAll = [...saidas, ...gastoCartao];
@@ -319,7 +306,6 @@ function renderList(elId, list, tone, group) {
   if (!list.length) { el.innerHTML = `<div class="empty-state">Nada por aqui ainda</div>`; return; }
 
   if (group) {
-    // Agrupa por descrição, somando os valores (só na tela — a planilha mantém cada linha separada)
     const groups = {};
     list.forEach((r) => {
       const key = (r.descricao || r.categoria).trim().toLowerCase();
@@ -376,7 +362,6 @@ function renderBills(bills) {
   document.getElementById("pendingLabel").textContent = `Pendente: ${fmtBRL(totalPending)}`;
   document.getElementById("statusBarFill").style.width = `${bills.length ? (paid.length / bills.length) * 100 : 0}%`;
 
-  // Agrupa por descrição (só na exibição — a planilha continua com cada lançamento separado)
   const groups = {};
   bills.forEach((r) => {
     const key = (r.descricao || r.categoria).trim().toLowerCase();
@@ -445,9 +430,6 @@ function escapeHTML(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-/* ============================================================
-   BUSCA
-   ============================================================ */
 document.addEventListener("input", (e) => {
   if (e.target.id !== "searchInput") return;
   const term = e.target.value.trim().toLowerCase();
@@ -456,9 +438,6 @@ document.addEventListener("input", (e) => {
   });
 });
 
-/* ============================================================
-   UI: TABS, TEMA, TILT 3D, MODAL
-   ============================================================ */
 function bindUI() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -471,7 +450,6 @@ function bindUI() {
 
   document.getElementById("refreshBtn").addEventListener("click", () => ensureFreshToken(loadData));
 
-  // Tema
   document.getElementById("themeToggle").addEventListener("click", () => {
     const body = document.body;
     const next = body.dataset.theme === "dark" ? "light" : "dark";
@@ -479,7 +457,6 @@ function bindUI() {
     localStorage.setItem("theme", next);
   });
 
-  // Ocultar/mostrar valores
   const hideBtn = document.getElementById("hideValuesBtn");
   const eyeOpen = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
   const eyeClosed = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.6 20.6 0 0 1 5.06-6.06M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a20.6 20.6 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>`;
@@ -496,7 +473,6 @@ function bindUI() {
     if (rows.length) renderAll();
   });
 
-  // Tilt 3D nos cards de resumo
   document.querySelectorAll("[data-tilt]").forEach((card) => {
     card.addEventListener("pointermove", (e) => {
       const rect = card.getBoundingClientRect();
@@ -508,11 +484,16 @@ function bindUI() {
     card.addEventListener("pointerup", () => { card.style.transform = ""; });
   });
 
-  // Modal
   const backdrop = document.getElementById("modalBackdrop");
   const openModal = () => {
     document.getElementById("fData").value = new Date().toISOString().slice(0, 10);
     vencimentoTouched = false;
+    document.querySelectorAll(".type-toggle button").forEach((b) => b.classList.remove("active"));
+    document.querySelector('.type-toggle button[data-type="Entradas"]').classList.add("active");
+    selectedType = "Entradas";
+    document.getElementById("descricaoFieldCartao").classList.add("hidden");
+    document.getElementById("descricaoFieldNormal").classList.remove("hidden");
+    document.getElementById("fCartaoSelect").value = "";
     backdrop.classList.add("open");
   };
   const closeModal = () => { backdrop.classList.remove("open"); document.getElementById("entryForm").reset(); vencimentoTouched = false; };
@@ -532,19 +513,20 @@ function bindUI() {
   }
 
   function suggestVencimento() {
-    if (vencimentoTouched) return; // não sobrescreve o que o usuário já digitou
+    if (vencimentoTouched) return;
     const dataVal = document.getElementById("fData").value;
     if (!dataVal) return;
     const baseDate = new Date(dataVal + "T00:00:00");
     const fVenc = document.getElementById("fVencimento");
 
     if (selectedType.toLowerCase().startsWith("gasto cart")) {
-      // Cartão: vencimento fixo no dia CARD_DUE_DAY. Se faltar <= CARD_CUTOFF_DAYS
-      // dias (ou o dia já passou), cai pra fatura do mês seguinte.
-      let candidate = new Date(baseDate.getFullYear(), baseDate.getMonth(), CONFIG.CARD_DUE_DAY);
+      const desc = document.getElementById("fDescricao").value.trim();
+      const dueDay = CONFIG.CARDS[desc];
+      if (!dueDay) return;
+      let candidate = new Date(baseDate.getFullYear(), baseDate.getMonth(), dueDay);
       const diffDays = Math.round((candidate - baseDate) / 86400000);
       if (diffDays < 0 || diffDays <= CONFIG.CARD_CUTOFF_DAYS) {
-        candidate = new Date(candidate.getFullYear(), candidate.getMonth() + 1, CONFIG.CARD_DUE_DAY);
+        candidate = new Date(candidate.getFullYear(), candidate.getMonth() + 1, dueDay);
       }
       fVenc.value = toISO(candidate);
       fVenc.dispatchEvent(new Event("change"));
@@ -553,8 +535,6 @@ function bindUI() {
 
     const desc = document.getElementById("fDescricao").value.trim().toLowerCase();
     if (!desc) { fVenc.value = ""; return; }
-    // Conta recorrente: acha o lançamento mais recente com a mesma descrição
-    // que já tem vencimento, e soma 1 mês (mantém o mesmo dia).
     const matches = rows.filter((r) => r.descricao.trim().toLowerCase() === desc && r.vencimento);
     if (!matches.length) return;
     matches.sort((a, b) => (parseDateBR(b.vencimento) || 0) - (parseDateBR(a.vencimento) || 0));
@@ -567,17 +547,49 @@ function bindUI() {
   document.getElementById("fDescricao").addEventListener("input", suggestVencimento);
   document.getElementById("fData").addEventListener("change", suggestVencimento);
 
+  const descNormal = document.getElementById("descricaoFieldNormal");
+  const descCartao = document.getElementById("descricaoFieldCartao");
+  const cartaoSelect = document.getElementById("fCartaoSelect");
+
+  cartaoSelect.addEventListener("change", () => {
+    if (cartaoSelect.value === "__outro__") {
+      descNormal.classList.remove("hidden");
+      document.getElementById("fDescricao").value = "";
+      document.getElementById("fDescricao").focus();
+    } else {
+      descNormal.classList.add("hidden");
+      document.getElementById("fDescricao").value = cartaoSelect.value;
+      vencimentoTouched = false;
+      suggestVencimento();
+    }
+  });
+
   document.querySelectorAll(".type-toggle button").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".type-toggle button").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       selectedType = btn.dataset.type;
+      if (selectedType.toLowerCase().startsWith("gasto cart")) {
+        descCartao.classList.remove("hidden");
+        descNormal.classList.add("hidden");
+        cartaoSelect.value = "";
+        document.getElementById("fDescricao").value = "";
+      } else {
+        descCartao.classList.add("hidden");
+        descNormal.classList.remove("hidden");
+      }
       suggestVencimento();
     });
   });
 
   document.getElementById("entryForm").addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    if (!document.getElementById("fDescricao").value.trim()) {
+      showToast(selectedType.toLowerCase().startsWith("gasto cart") ? "Selecione o cartão" : "Preencha a descrição", true);
+      return;
+    }
+
     const submitBtn = document.getElementById("submitBtn");
     submitBtn.disabled = true;
     submitBtn.innerHTML = `<span class="spinner"></span>`;
@@ -622,9 +634,6 @@ function initTheme() {
   document.body.dataset.theme = saved;
 }
 
-/* ============================================================
-   LANÇAMENTO POR VOZ
-   ============================================================ */
 const VOICE_CATEGORY_HINTS = {
   "Moradia": ["energia", "água", "agua", "aluguel", "internet", "condomínio", "condominio", "luz", "gás", "gas"],
   "Transporte": ["uber", "gasolina", "combustível", "combustivel", "estacionamento", "ônibus", "onibus", "99", "táxi", "taxi"],
@@ -659,7 +668,7 @@ function bindVoice() {
       listening = true;
       btn.classList.add("listening");
       showToast("Ouvindo... fale o lançamento", false, true);
-    } catch (e) { /* já estava rodando */ }
+    } catch (e) { }
   });
 
   recognition.addEventListener("result", (e) => {
@@ -698,16 +707,22 @@ function fillFormFromVoice(text) {
     .trim();
   if (desc) desc = desc.charAt(0).toUpperCase() + desc.slice(1);
 
-  document.getElementById("newEntryBtn").click(); // abre o modal (já seta a data de hoje)
+  document.getElementById("newEntryBtn").click();
 
   const typeBtn = document.querySelector(`.type-toggle button[data-type="${tipo}"]`);
-  if (typeBtn) typeBtn.click(); // atualiza o tipo selecionado e recalcula vencimento se for cartão
+  if (typeBtn) typeBtn.click();
+
+  if (tipo.toLowerCase().startsWith("gasto cart")) {
+    document.getElementById("fCartaoSelect").value = "__outro__";
+    document.getElementById("descricaoFieldCartao").classList.add("hidden");
+    document.getElementById("descricaoFieldNormal").classList.remove("hidden");
+  }
 
   document.getElementById("fCategoria").value = categoria;
   document.getElementById("fDescricao").value = desc;
   if (valor !== null) document.getElementById("fValor").value = valor;
 
-  document.getElementById("fDescricao").dispatchEvent(new Event("input")); // tenta sugerir vencimento de conta recorrente
+  document.getElementById("fDescricao").dispatchEvent(new Event("input"));
 }
 
 let toastTimer = null;
@@ -719,7 +734,6 @@ function showToast(msg, isError, isLoading) {
   if (!isLoading) toastTimer = setTimeout(() => el.classList.remove("show"), isError ? 8000 : 2600);
 }
 
-/* Registra o service worker (funciona offline após o primeiro carregamento) */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(() => {});
