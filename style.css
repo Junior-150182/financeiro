@@ -345,12 +345,18 @@ button, input, select { font-family: inherit; }
 .field-row .field { flex: 1; }
 .field small.hint { display:block; margin-top:4px; color: var(--text-muted); font-size: 0.68rem; }
 
-.fuel-toggle {
-  display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none;
+.fuel-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.fuel-check {
+  display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; user-select: none;
   background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
-  padding: 11px 12px; margin-bottom: 12px; font-size: 0.82rem; font-weight: 600;
+  padding: 0 14px; flex: none; font-size: 1.05rem;
 }
-.fuel-toggle input { width: 17px; height: 17px; accent-color: var(--accent); flex: none; }
+.fuel-check input { width: 17px; height: 17px; accent-color: var(--accent); flex: none; }
+.fuel-km-input {
+  flex: 1; background: var(--bg-soft); border: 1px solid var(--border); color: var(--text);
+  padding: 11px 12px; border-radius: 12px; font-size: 0.9rem;
+}
+.fuel-km-input:disabled { opacity: 0.45; }
 
 .kml-badge { background: var(--blue-soft); color: var(--blue); margin-left: 4px; }
 
