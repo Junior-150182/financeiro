@@ -1,11 +1,18 @@
 Como publicar e instalar seu Dashboard Financeiro
 1. Confira sua planilha
 O app espera uma aba chamada "Lançamentos" com estas colunas, nesta ordem, a partir da linha 2:
-A (Data)	B (Tipo)	C (Categoria)	D (Descrição)	E (Data de Vencimento)	F (Valor)	G (ID)	H (Status)
+A (Data)	B (Tipo)	C (Categoria)	D (Descrição)	E (Data de Vencimento)	F (Valor)	G (ID)	H (Status)	I (Km)	J (Litros)
 04/08/2026	Saídas	Moradia	Energia	05/08/2026	285,28		Pago
+13/08/2026	Gasto Cartão	Transporte	Combustível	15/09/2026	253,58		Pendente	125430	38,5
 Tipo deve ser um de: `Entradas`, `Saídas` ou `Gasto Cartão`.
 A coluna H (Status) é nova — o app cria/usa ela para marcar "Pago"/"Pendente" quando você toca no botão dentro do app. Se a sua aba real tiver outro nome (não "Lançamentos"), abra `app.js` e troque o valor de `SHEET_NAME` no topo do arquivo.
 Linhas sem "Data de Vencimento" não entram na lista de Contas Fixas — só aparecem em Entradas/Despesas.
+As colunas I (Km) e J (Litros) são para controle de combustível — ficam em branco em qualquer lançamento normal.
+
+### Controle de combustível (Km/l)
+Ao lançar uma despesa, marque a caixa "⛽ Abastecimento" no formulário: ela preenche Categoria = `Transporte` e Descrição = `Combustível` automaticamente (funciona tanto em `Saídas` quanto em `Gasto Cartão`, sem duplicar o valor — segue a mesma regra do Cartão explicada abaixo) e libera dois campos: **Km atual** (odômetro no momento do abastecimento) e **Litros abastecidos**. Se for `Gasto Cartão`, o seletor de cartão continua aparecendo — ele não muda a Descrição (que permanece `Combustível`), serve só para o app calcular o vencimento certo daquele cartão.
+Com esses dois campos, o app calcula sozinho o consumo (km/l) de cada abastecimento, comparando o Km com o abastecimento anterior, e mostra tudo numa aba própria "Combustível" — média de km/l, litros e gasto do mês, preço médio por litro e o histórico completo.
+Para o cálculo funcionar bem, registre o Km sempre que abastecer (idealmente enchendo o tanque) e preencha os Litros — sem os litros o app ainda guarda o Km, mas não consegue calcular o km/l daquele abastecimento.
 2. Suba os arquivos no GitHub Pages (grátis)
 Crie uma conta em github.com (se ainda não tiver) e me diga seu nome de usuário — preciso confirmar se ele bate com a "Origem autorizada" que você cadastrou no Google Cloud (`https://SEUUSUARIO.github.io`).
 Crie um repositório novo, público, com o nome exatamente: `financeiro` (ou o nome que preferir).
