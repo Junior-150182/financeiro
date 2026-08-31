@@ -1,4 +1,4 @@
-const CACHE = "financeiro-cache-v11";
+const CACHE = "financeiro-cache-v12";
 const ASSETS = [
   "./",
   "./index.html",
@@ -23,22 +23,21 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Network-first for Google APIs (always want fresh data), cache-first for app shell
+// Network-first para tudo do app (sempre busca a versão mais nova quando
+// tem internet, evitando o app ficar "preso" numa versão antiga); usa o
+// cache só quando estiver offline. Chamadas ao Google nunca são cacheadas.
 self.addEventListener("fetch", (event) => {
   const url = event.request.url;
   if (url.includes("googleapis.com") || url.includes("accounts.google.com")) {
     return; // let these pass straight through, never cache auth/data calls
   }
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return (
-        cached ||
-        fetch(event.request).then((resp) => {
-          const copy = resp.clone();
-          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-          return resp;
-        }).catch(() => cached)
-      );
-    })
+    fetch(event.request)
+      .then((resp) => {
+        const copy = resp.clone();
+        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        return resp;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
