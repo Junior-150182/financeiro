@@ -301,19 +301,16 @@
         <input type="date" id="fVencimento" />
         <small class="hint">Preencha só se este lançamento for uma conta a pagar/controlar.</small>
       </div>
-      <label class="fuel-toggle" id="fuelToggleRow">
-        <input type="checkbox" id="fIsFuel" />
-        <span>⛽ Abastecimento — registrar Km para calcular consumo</span>
-      </label>
-      <div class="field-row hidden" id="fuelFields">
-        <div class="field">
-          <label>Km atual (odômetro)</label>
-          <input type="number" id="fKm" step="1" min="0" placeholder="Ex: 125430" />
-        </div>
-        <div class="field">
-          <label>Litros abastecidos</label>
-          <input type="number" id="fLitros" step="0.01" min="0" placeholder="Ex: 38,5" />
-        </div>
+      <div class="fuel-row">
+        <label class="fuel-check" title="Abastecimento">
+          <input type="checkbox" id="fIsFuel" />
+          <span>⛽</span>
+        </label>
+        <input type="number" id="fKm" step="1" min="0" placeholder="Km atual" class="fuel-km-input" disabled />
+      </div>
+      <div class="field hidden" id="fuelLitrosField">
+        <label>Litros abastecidos</label>
+        <input type="number" id="fLitros" step="0.01" min="0" placeholder="Ex: 38,5" />
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="cancelBtn">Cancelar</button>
