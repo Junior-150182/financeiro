@@ -112,22 +112,34 @@ async function loadData() {
   showToast("Sincronizando com a planilha...", false, true);
   try {
     const range = `${encodeURIComponent(CONFIG.SHEET_NAME)}!A2:J2000`;
-    const data = await sheetsFetch(`/values/${range}`);
+    // Km/Litros são lidos à parte, com valueRenderOption=UNFORMATTED_VALUE:
+    // assim pegamos o número puro (ex: 38.5) direto da planilha, sem depender
+    // de como o Google Sheets formata o texto (ponto/vírgula, milhar etc.),
+    // que é o que causava valores absurdos tipo "30.011.900 L".
+    const rangeKmLitros = `${encodeURIComponent(CONFIG.SHEET_NAME)}!I2:J2000`;
+    const [data, dataKmLitros] = await Promise.all([
+      sheetsFetch(`/values/${range}`),
+      sheetsFetch(`/values/${rangeKmLitros}?valueRenderOption=UNFORMATTED_VALUE`),
+    ]);
     const values = data.values || [];
+    const kmLitrosValues = dataKmLitros.values || [];
     rows = values
-      .map((r, i) => ({
-        rowNumber: i + 2,
-        data: r[0] || "",
-        tipo: (r[1] || "").trim(),
-        categoria: (r[2] || "").trim() || "Outros",
-        descricao: (r[3] || "").trim(),
-        vencimento: r[4] || "",
-        valor: parseValor(r[5]),
-        id: r[6] || "",
-        status: (r[7] || "").trim(),
-        km: parseValor(r[8]),
-        litros: parseValor(r[9]),
-      }))
+      .map((r, i) => {
+        const kl = kmLitrosValues[i] || [];
+        return {
+          rowNumber: i + 2,
+          data: r[0] || "",
+          tipo: (r[1] || "").trim(),
+          categoria: (r[2] || "").trim() || "Outros",
+          descricao: (r[3] || "").trim(),
+          vencimento: r[4] || "",
+          valor: parseValor(r[5]),
+          id: r[6] || "",
+          status: (r[7] || "").trim(),
+          km: Number(kl[0]) || 0,
+          litros: Number(kl[1]) || 0,
+        };
+      })
       .filter((r) => r.data || r.descricao || r.valor);
     renderAll();
     showToast("Dados atualizados", false);
@@ -249,9 +261,12 @@ function renderAll() {
 
 /* ===== Combustível / consumo (km por litro) ===== */
 function renderCombustivel(now) {
-  // Qualquer lançamento com Km preenchido conta como abastecimento,
-  // independente de como Categoria/Descrição foram digitados.
-  const abastecimentos = rows.filter((r) => r.km > 0).sort((a, b) => a.km - b.km);
+  // Conta como abastecimento linhas com Km preenchido E que sejam de fato
+  // de combustível (evita que algum dado antigo/solto nas colunas I/J de
+  // outra época entre na conta por engano).
+  const abastecimentos = rows
+    .filter((r) => r.km > 0 && r.km < 2000000 && (r.descricao || "").toLowerCase().includes("combust"))
+    .sort((a, b) => a.km - b.km);
 
   const withConsumo = abastecimentos.map((r, i) => {
     const anterior = i > 0 ? abastecimentos[i - 1] : null;
