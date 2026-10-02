@@ -156,6 +156,45 @@ function parseValor(v) {
   return isNaN(f) ? 0 : f;
 }
 
+let cachedSheetId = null;
+async function getSheetId() {
+  if (cachedSheetId !== null) return cachedSheetId;
+  const meta = await sheetsFetch(`?fields=sheets.properties(sheetId,title)`);
+  const sh = (meta.sheets || []).find((s) => s.properties.title === CONFIG.SHEET_NAME);
+  cachedSheetId = sh ? sh.properties.sheetId : 0;
+  return cachedSheetId;
+}
+
+// Força o formato certo em cada coluna da linha recém-lançada.
+// Sem isso a linha herda o formato da linha vizinha: a data aparece como
+// número (46297) e Litros aparece como data (10/02/1900).
+async function formatNewRow(updatedRange) {
+  const m = /!?[A-Z]+(\d+):[A-Z]+(\d+)$/.exec(updatedRange || "");
+  if (!m) return;
+  const startRow = Number(m[1]) - 1;
+  const endRow = Number(m[2]);
+  const sheetId = await getSheetId();
+  const fmt = (col, type, pattern) => ({
+    repeatCell: {
+      range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: col, endColumnIndex: col + 1 },
+      cell: { userEnteredFormat: { numberFormat: { type, pattern } } },
+      fields: "userEnteredFormat.numberFormat",
+    },
+  });
+  await sheetsFetch(`:batchUpdate`, {
+    method: "POST",
+    body: JSON.stringify({
+      requests: [
+        fmt(0, "DATE", "dd/MM/yyyy"),   // A Data
+        fmt(4, "DATE", "dd/MM/yyyy"),   // E Vencimento
+        fmt(5, "CURRENCY", "R$ #,##0.00"), // F Valor
+        fmt(8, "NUMBER", "#,##0"),      // I Km
+        fmt(9, "NUMBER", "0.00"),       // J Litros
+      ],
+    }),
+  });
+}
+
 async function appendRow(entry) {
   const range = `${encodeURIComponent(CONFIG.SHEET_NAME)}!A2:J2`;
   const body = {
@@ -166,10 +205,15 @@ async function appendRow(entry) {
       entry.litros || "",
     ]],
   };
-  await sheetsFetch(`/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+  const res = await sheetsFetch(`/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
     method: "POST",
     body: JSON.stringify(body),
   });
+  try {
+    await formatNewRow(res.updates && res.updates.updatedRange);
+  } catch (e) {
+    console.warn("Não foi possível formatar a linha nova", e);
+  }
 }
 
 async function updateStatus(rowNumber, newStatus) {
