@@ -1,9 +1,10 @@
-const CACHE = "financeiro-cache-v14";
+const CACHE = "financeiro-cache-v15";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
+  "./cofrinho.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
