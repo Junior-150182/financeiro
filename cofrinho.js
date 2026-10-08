@@ -47,7 +47,11 @@
     .cf-date{background:transparent;color:inherit;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font:inherit}
     .cf-top{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;flex-wrap:wrap}
     .cf-card{margin-bottom:14px}
-    .cf-sub{font-size:.8rem;color:var(--text-muted);margin:14px 0 6px}`;
+    .cf-sub{font-size:.8rem;color:var(--text-muted);margin:14px 0 6px}
+    .tab-btn[data-tab="cofrinho"]{color:var(--green);border-color:var(--green);background:var(--green-soft)}
+    .tab-btn.active[data-tab="cofrinho"]{background:var(--green)!important;color:#fff!important;border-color:var(--green)!important}
+    .type-toggle button.cofrinho{color:var(--green)}
+    .type-toggle button.cofrinho.active{background:var(--green)!important;color:#fff!important}`;
   document.head.appendChild(style);
 
   const tab = document.createElement("button");
@@ -199,9 +203,11 @@
       await fn();
       render();
       showToast(ok, false);
+      return true;
     } catch (err) {
       console.error(err);
       showToast("Erro: " + String(err.message).slice(0, 120), true);
+      return false;
     } finally { busy = false; }
   }
 
@@ -250,5 +256,57 @@
     if (isNaN(s)) { prev.textContent = "Digite o saldo que aparece no Nubank e o app calcula o rendimento."; return; }
     const v = s - sumDone("20k") - sumRend();
     prev.textContent = valuesHidden ? "Rendimento calculado: ••••••" : `Rendimento desde o último registro: ${v >= 0 ? "+" : ""}R$ ${pt(v)}`;
+  });
+
+  /* ---------- Opção "Cofrinho" no Novo Lançamento ---------- */
+  const modalEl = document.querySelector(".modal");
+  const form = document.getElementById("entryForm");
+  const toggle = document.querySelector(".type-toggle");
+  const tb = document.createElement("button");
+  tb.type = "button"; tb.className = "cofrinho"; tb.dataset.type = "Cofrinho"; tb.textContent = "Cofrinho";
+  toggle.appendChild(tb);
+
+  const gf = document.createElement("div");
+  gf.className = "field"; gf.style.display = "none";
+  gf.innerHTML = `<label>Desafio</label><select id="cfGoalSel">${CF.GOALS.map((g) => `<option value="${g.key}">${g.label}</option>`).join("")}</select>
+    <small class="hint">O valor do depósito é o número dele (1 a ${CF.COUNT}). A data vem com hoje e pode ser alterada.</small>`;
+  form.insertBefore(gf, form.firstChild);
+
+  const hideInCf = () => [
+    document.getElementById("fCategoria").closest(".field"),
+    document.getElementById("fVencimento").closest(".field"),
+    document.getElementById("descricaoFieldNormal"),
+    document.getElementById("descricaoFieldCartao"),
+    document.querySelector(".fuel-row"),
+    document.getElementById("fuelLitrosField"),
+  ];
+  function setMode(on) {
+    modalEl.classList.toggle("cf-mode", on);
+    gf.style.display = on ? "" : "none";
+    hideInCf().forEach((el) => (el.style.display = on ? "none" : ""));
+    document.getElementById("fCategoria").required = !on;
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".type-toggle button");
+    if (b) setMode(b.dataset.type === "Cofrinho");
+  });
+  document.getElementById("newEntryBtn").addEventListener("click", () => setMode(false));
+
+  // Roda antes do envio normal e impede que o depósito vá para "Lançamentos"
+  form.addEventListener("submit", async (e) => {
+    if (!modalEl.classList.contains("cf-mode")) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const g = CF.GOALS.find((x) => x.key === document.getElementById("cfGoalSel").value);
+    const v = Number(document.getElementById("fValor").value);
+    const dateIso = document.getElementById("fData").value;
+    if (!Number.isInteger(v) || v < 1 || v > CF.COUNT) return showToast(`O valor deve ser o número do depósito (1 a ${CF.COUNT})`, true);
+    const ok = await run(async () => {
+      if (!loaded) await load();
+      const d = data[g.key][v - 1];
+      if (d.done) throw new Error(`O depósito #${v} do ${g.label} já estava marcado`);
+      await setDep(g, d, true, dateIso);
+    }, `Depósito #${v} guardado no ${g.label}`);
+    if (ok) document.getElementById("closeModal").click();
   });
 })();
